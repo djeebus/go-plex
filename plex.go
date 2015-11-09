@@ -6,6 +6,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"time"
 )
 
 type PlexUser struct {
@@ -140,6 +141,33 @@ type PlexDevice struct {
 	IsOnline				bool	`xml:"presence,attr"`
 
 	Connections				[]*PlexDeviceConnection	`xml:"Connection"`
+}
+
+type NoValidConnection struct {}
+func (*NoValidConnection) Error() string { return "No valid connection found." }
+
+func (device *PlexDevice) GetBestConnection(connectTimeout time.Duration) (*PlexDeviceConnection, error) {
+	cxns := make(chan *PlexDeviceConnection)
+
+	for _, c := range device.Connections {
+		go func () {
+			result := c.Validate()
+			if result {
+				fmt.Printf("Added %s", c.Uri)
+				cxns <- c
+			}
+		} ()
+	}
+
+	timeout := time.After(connectTimeout)
+	for {
+		select {
+		case cxn := <-cxns:
+			return cxn, nil
+		case <- timeout:
+			return nil, &NoValidConnection{}
+		}
+	}
 }
 
 type PlexResourceContainer struct {
