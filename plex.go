@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"time"
+	"sync"
 )
 
 type PlexUser struct {
@@ -149,15 +150,24 @@ func (*NoValidConnection) Error() string { return "No valid connection found." }
 func (device *PlexDevice) GetBestConnection(connectTimeout time.Duration) (*PlexDeviceConnection, error) {
 	cxns := make(chan *PlexDeviceConnection)
 
+	var connectionAttempts sync.WaitGroup
+
 	for _, c := range device.Connections {
-		go func () {
-			result := c.Validate()
+		connectionAttempts.Add(1)
+		go func (cxn *PlexDeviceConnection) {
+			defer connectionAttempts.Done()
+
+			result := cxn.Validate()
 			if result {
-				fmt.Printf("Added %s", c.Uri)
-				cxns <- c
+				cxns <- cxn
 			}
-		} ()
+		} (c)
 	}
+
+	go func (wg *sync.WaitGroup) {
+		wg.Wait()
+		close(cxns)
+	}(&connectionAttempts)
 
 	timeout := time.After(connectTimeout)
 	for {
