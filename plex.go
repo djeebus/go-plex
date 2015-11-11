@@ -114,8 +114,12 @@ type PlexDeviceConnection struct {
 	IsLocal					bool	`xml:"local,attr"`
 }
 
-func (connection *PlexDeviceConnection) Validate () bool {
-	response, err := http.Get(connection.Uri)
+func (connection *PlexDeviceConnection) Validate (client *http.Client) bool {
+	if client == nil {
+		client = http.DefaultClient
+	}
+
+	response, err := client.Get(connection.Uri)
 	if response != nil {
 		defer response.Body.Close()
 	}
@@ -140,6 +144,7 @@ type PlexDevice struct {
 	IsSynced				bool	`xml:"synced,attr"`
 	HasPublicAddressMatches	bool	`xml:"publicAddressMatches,attr"`
 	IsOnline				bool	`xml:"presence,attr"`
+	SourceTitle				string	`xml:"sourceTitle,attr"`
 
 	Connections				[]*PlexDeviceConnection	`xml:"Connection"`
 }
@@ -157,7 +162,7 @@ func (device *PlexDevice) GetBestConnection(connectTimeout time.Duration) (*Plex
 		go func (cxn *PlexDeviceConnection) {
 			defer connectionAttempts.Done()
 
-			result := cxn.Validate()
+			result := cxn.Validate(nil)
 			if result {
 				cxns <- cxn
 			}
